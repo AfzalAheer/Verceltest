@@ -1,4 +1,11 @@
 const express = require('express');
 const app = express();
-app.get('/', (req, res) => res.send('USA Gateway Active'));
-module.exports = app;
+const PORT = process.env.PORT || 8000;
+
+app.get('/', (req, res) => {
+    res.send('<h1>Gateway Status: ACTIVE (Washington DC)</h1>');
+});
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
