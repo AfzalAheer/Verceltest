@@ -1,50 +1,61 @@
-const http = require('http');
+const express = require('express');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const cors = require('cors');
+const morgan = require('morgan');
 
+const app = express();
 const PORT = process.env.PORT || 8000;
 
-const server = http.createServer((req, res) => {
-    // Ye Headers Facebook ke security bots ko dhoka dene ke liye hain
-    res.writeHead(200, { 
-        'Content-Type': 'text/html; charset=UTF-8',
-        'X-Frame-Options': 'SAMEORIGIN',
-        'X-Content-Type-Options': 'nosniff',
-        'Referrer-Policy': 'strict-origin-when-cross-origin',
-        'Permissions-Policy': 'geolocation=(), microphone=()',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Server': 'Apache/2.4.52 (Ubuntu)', // Fake Server Signature
-        'Set-Cookie': 'session_id=usa_secure_gate_' + Math.random().toString(36).substring(7) + '; HttpOnly; Secure'
-    });
-    
-    // Facebook Bot Bypass HTML
-    res.write(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Dashboard - WorkSpace</title>
-        <style>
-            body { background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-            .container { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); text-align: center; width: 350px; }
-            .status { color: #2ecc71; font-weight: bold; font-size: 18px; }
-            .location { color: #7f8c8d; font-size: 14px; margin-top: 10px; }
-            .secure-badge { background: #e8f5e9; color: #2e7d32; padding: 5px 15px; border-radius: 20px; font-size: 12px; display: inline-block; margin-top: 20px; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2 style="color: #2c3e50;">Secure Access</h2>
-            <p class="status">● Connection Encrypted</p>
-            <p class="location">Node Location: <b>Washington, D.C., USA</b></p>
-            <div class="secure-badge">Verified USA Resident IP</div>
-            <p style="font-size: 10px; color: #bdc3c7; margin-top: 30px;">ID: ${Math.floor(Math.random() * 99999999)}</p>
-        </div>
-    </body>
-    </html>
-    `);
-    res.end();
+// 1. Logging (Professional Monitoring)
+app.use(morgan('combined'));
+
+// 2. Helmet with full CSP (Content Security Policy) protection
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            "default-src": ["'self'"],
+            "script-src": ["'self'", "'unsafe-inline'"],
+            "style-src": ["'self'", "'unsafe-inline'"],
+            "img-src": ["'self'", "data:", "https:"],
+        },
+    },
+}));
+
+// 3. Rate Limiting (Abuse Prevention)
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per window
+    message: "Too many requests, please try again later."
+});
+app.use(limiter);
+
+// 4. CORS properly configured
+const corsOptions = {
+    origin: '*', // Production mein isse apne domain par restrict karein
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    preflightContinue: false,
+    optionsSuccessStatus: 204
+};
+app.use(cors(corsOptions));
+
+// 5. Secure Route with Error Handling
+app.get('/', (req, res) => {
+    try {
+        res.status(200).json({
+            status: "Secure Professional Gateway Active",
+            location: "Washington, D.C. Cluster",
+            protection: "Active (Helmet, Rate-Limit, CORS)",
+            timestamp: new Date().toISOString()
+        });
+    } catch (err) {
+        res.status(500).json({ error: "Internal Server Error" });
+    }
 });
 
-server.listen(PORT, () => {
-    console.log(`Stealth Proxy Engine Active on USA Port ${PORT}`);
+// 6. 404 & Global Error Handling
+app.use((req, res) => res.status(404).json({ error: "Route Not Found" }));
+
+app.listen(PORT, () => {
+    console.log(`[SECURE] Server running on port ${PORT}`);
 });
