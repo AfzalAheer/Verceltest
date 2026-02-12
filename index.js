@@ -4,7 +4,6 @@ const cluster = require('cluster');
 const os = require('os');
 
 const PORT = process.env.PORT || 8000;
-const TARGET_HOST = 'www.facebook.com';
 const numCPUs = os.cpus().length;
 
 if (cluster.isPrimary) {
@@ -14,7 +13,6 @@ if (cluster.isPrimary) {
 } else {
     const keepAliveAgent = new https.Agent({ keepAlive: true, maxSockets: 150 });
     
-    // Circuit Breaker Variables
     let failureTimestamps = [];
     const FAILURE_WINDOW = 30000;
     const FAILURE_THRESHOLD = 10;
@@ -35,37 +33,47 @@ if (cluster.isPrimary) {
         if (req.url === '/health') { res.writeHead(200); return res.end('HEALTHY'); }
         if (isCircuitOpen) { res.writeHead(503); return res.end('Circuit Open: Stability Mode'); }
 
-        // Professional Header Sanitization
+        // --- GLOBAL LOGIC START ---
+        let target;
+        try {
+            // Usage: link.app/https://whoer.net
+            target = new URL(req.url.substring(1));
+        } catch (e) {
+            // Default target if no URL provided
+            target = new URL('https://www.facebook.com');
+        }
+        // --- GLOBAL LOGIC END ---
+
         const cleanHeaders = { ...req.headers };
-        ['connection', 'keep-alive', 'proxy-authenticate', 'te', 'upgrade'].forEach(h => delete cleanHeaders[h]);
+        ['connection', 'keep-alive', 'proxy-authenticate', 'te', 'upgrade', 'host'].forEach(h => delete cleanHeaders[h]);
         
         const options = {
-            hostname: TARGET_HOST,
+            hostname: target.hostname,
             port: 443,
-            path: req.url,
+            path: target.pathname + target.search,
             method: req.method,
             agent: keepAliveAgent,
             headers: {
                 ...cleanHeaders,
-                'host': TARGET_HOST,
+                'host': target.hostname,
                 'X-Forwarded-For': `66.249.66.${Math.floor(Math.random() * 255)}`,
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Referer': 'https://www.google.com/'
             }
         };
 
         const proxyReq = https.request(options, (proxyRes) => {
-            // MANUAL PRO SECURITY HEADERS (Helmet replacement)
             const secureHeaders = {
                 ...proxyRes.headers,
                 'X-Content-Type-Options': 'nosniff',
                 'X-Frame-Options': 'SAMEORIGIN',
-                'Strict-Transport-Security': 'max-age=31536000',
-                'X-XSS-Protection': '1; mode=block'
+                'Strict-Transport-Security': 'max-age=31536000'
             };
 
             res.writeHead(proxyRes.statusCode, secureHeaders);
             proxyRes.pipe(res);
-            console.log(`[WORKER ${process.pid}] ${req.method} ${req.url} -> ${proxyRes.statusCode} (${Date.now() - start}ms)`);
+            console.log(`[WORKER ${process.pid}] ${req.method} ${target.hostname} -> ${proxyRes.statusCode}`);
         });
 
         proxyReq.on('error', (err) => {
@@ -84,5 +92,5 @@ if (cluster.isPrimary) {
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
 
-    server.listen(PORT, () => console.log(`[WORKER ${process.pid}] Online`));
+    server.listen(PORT, () => console.log(`[WORKER ${process.pid}] Global Active`));
 }
